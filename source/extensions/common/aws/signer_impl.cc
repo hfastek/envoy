@@ -18,27 +18,32 @@ namespace Common {
 namespace Aws {
 
 void SignerImpl::sign(Http::RequestMessage& message, bool sign_body) {
+  ENVOY_LOG(error, "sign start");
   const auto content_hash = createContentHash(message, sign_body);
   auto& headers = message.headers();
   sign(headers, content_hash);
 }
 
 void SignerImpl::sign(Http::RequestHeaderMap& headers) {
+  ENVOY_LOG(error, "sign start");
   // S3 payloads require special treatment.
-  if (service_name_ == "s3") {
-    headers.setReference(SignatureHeaders::get().ContentSha256,
-                         SignatureConstants::get().UnsignedPayload);
-    sign(headers, SignatureConstants::get().UnsignedPayload);
-  } else {
-    headers.setReference(SignatureHeaders::get().ContentSha256,
-                         SignatureConstants::get().HashedEmptyString);
-    sign(headers, SignatureConstants::get().HashedEmptyString);
-  }
+  // if (service_name_ == "s3") {
+  //   headers.setReference(SignatureHeaders::get().ContentSha256,
+  //                        SignatureConstants::get().UnsignedPayload);
+  //   sign(headers, SignatureConstants::get().UnsignedPayload);
+  // } else {
+  headers.setReference(SignatureHeaders::get().ContentSha256,
+                        SignatureConstants::get().HashedEmptyString);
+  sign(headers, SignatureConstants::get().HashedEmptyString);
+  // }
 }
 
 void SignerImpl::sign(Http::RequestHeaderMap& headers, const std::string& content_hash) {
+  ENVOY_LOG(error, "sign start");
   headers.setReferenceKey(SignatureHeaders::get().ContentSha256, content_hash);
   const auto& credentials = credentials_provider_->getCredentials();
+  ENVOY_LOG(error, "accessKeyId: \n{}", credentials.accessKeyId().value());
+  ENVOY_LOG(error, "secretAccessKey: \n{}", credentials.secretAccessKey().value());
   if (!credentials.accessKeyId() || !credentials.secretAccessKey()) {
     // Empty or "anonymous" credentials are a valid use-case for non-production environments.
     // This behavior matches what the AWS SDK would do.
@@ -63,18 +68,18 @@ void SignerImpl::sign(Http::RequestHeaderMap& headers, const std::string& conten
   const auto canonical_request = Utility::createCanonicalRequest(
       method_header->value().getStringView(), path_header->value().getStringView(),
       canonical_headers, content_hash);
-  ENVOY_LOG(debug, "Canonical request:\n{}", canonical_request);
+  ENVOY_LOG(error, "Canonical request:\n{}", canonical_request);
   // Phase 2: Create a string to sign
   const auto credential_scope = createCredentialScope(short_date);
   const auto string_to_sign = createStringToSign(canonical_request, long_date, credential_scope);
-  ENVOY_LOG(debug, "String to sign:\n{}", string_to_sign);
+  ENVOY_LOG(error, "String to sign:\n{}", string_to_sign);
   // Phase 3: Create a signature
   const auto signature =
       createSignature(credentials.secretAccessKey().value(), short_date, string_to_sign);
   // Phase 4: Sign request
   const auto authorization_header = createAuthorizationHeader(
       credentials.accessKeyId().value(), credential_scope, canonical_headers, signature);
-  ENVOY_LOG(debug, "Signing request with: {}", authorization_header);
+  ENVOY_LOG(error, "Signing request with: {}", authorization_header);
   headers.addCopy(Http::Headers::get().Authorization, authorization_header);
 }
 
